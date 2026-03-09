@@ -1,98 +1,120 @@
-<p align="center">
-  <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="120" alt="Nest Logo" /></a>
-</p>
+# Bitespeed Assignment
 
-[circleci-image]: https://img.shields.io/circleci/build/github/nestjs/nest/master?token=abc123def456
-[circleci-url]: https://circleci.com/gh/nestjs/nest
+Backend service that identifies and links customer identities across multiple purchases based on email and phone number.
 
-  <p align="center">A progressive <a href="http://nodejs.org" target="_blank">Node.js</a> framework for building efficient and scalable server-side applications.</p>
-    <p align="center">
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/v/@nestjs/core.svg" alt="NPM Version" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/l/@nestjs/core.svg" alt="Package License" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/dm/@nestjs/common.svg" alt="NPM Downloads" /></a>
-<a href="https://circleci.com/gh/nestjs/nest" target="_blank"><img src="https://img.shields.io/circleci/build/github/nestjs/nest/master" alt="CircleCI" /></a>
-<a href="https://discord.gg/G7Qnnhy" target="_blank"><img src="https://img.shields.io/badge/discord-online-brightgreen.svg" alt="Discord"/></a>
-<a href="https://opencollective.com/nest#backer" target="_blank"><img src="https://opencollective.com/nest/backers/badge.svg" alt="Backers on Open Collective" /></a>
-<a href="https://opencollective.com/nest#sponsor" target="_blank"><img src="https://opencollective.com/nest/sponsors/badge.svg" alt="Sponsors on Open Collective" /></a>
-  <a href="https://paypal.me/kamilmysliwiec" target="_blank"><img src="https://img.shields.io/badge/Donate-PayPal-ff3f59.svg" alt="Donate us"/></a>
-    <a href="https://opencollective.com/nest#sponsor"  target="_blank"><img src="https://img.shields.io/badge/Support%20us-Open%20Collective-41B883.svg" alt="Support us"></a>
-  <a href="https://twitter.com/nestframework" target="_blank"><img src="https://img.shields.io/twitter/follow/nestframework.svg?style=social&label=Follow" alt="Follow us on Twitter"></a>
-</p>
-  <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
-  [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
+This project implements the Bitespeed Identity Reconciliation challenge using NestJS, Prisma ORM, and PostgreSQL.
 
-## Description
+The service exposes an API that receives a customer's email and/or phone number and returns a consolidated identity across all linked contacts.
 
-[Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
+## Tech Stack
 
-## Project setup
+- NestJS
+- TypeScript
+- Prisma ORM
+- PostgreSQL
+- Prisma Postgres Adapter
+- Render (API hosting)
 
-```bash
-$ npm install
+## API Deployment
+
+The API is deployed on Render.
+
+**Endpoint:**
+https://bitespeed-identity-cfa1.onrender.com/identify
+
+## API Endpoint
+
+### Identify Contact
+
+**POST /identify**
+
+#### Request Body
+
+```
+{
+  "email": "string (optional)",
+  "phoneNumber": "string (optional)"
+}
 ```
 
-## Compile and run the project
+At least one field must be provided.
 
-```bash
-# development
-$ npm run start
+#### Example Request
 
-# watch mode
-$ npm run start:dev
-
-# production mode
-$ npm run start:prod
+```
+POST https://bitespeed-identity-cfa1.onrender.com/identify
+{
+  "email": "zaid@test.com",
+  "phoneNumber": "111111"
+}
 ```
 
-## Run tests
+#### Example Response
 
-```bash
-# unit tests
-$ npm run test
-
-# e2e tests
-$ npm run test:e2e
-
-# test coverage
-$ npm run test:cov
+```
+{
+  "contact": {
+    "primaryContactId": 1,
+    "emails": [
+      "tausif@test.com",
+      "zaid@test.com"
+    ],
+    "phoneNumbers": [
+      "111111"
+    ],
+    "secondaryContactIds": [2]
+  }
+}
 ```
 
-## Deployment
+## Identity Resolution Logic
 
-When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.
+The `/identify` endpoint performs the following steps:
 
-If you are looking for a cloud-based platform to deploy your NestJS application, check out [Mau](https://mau.nestjs.com), our official platform for deploying NestJS applications on AWS. Mau makes deployment straightforward and fast, requiring just a few simple steps:
+1. **Search Existing Contacts**
+   - The service searches contacts where:
+     - email = request.email
+     - OR phoneNumber = request.phoneNumber
 
-```bash
-$ npm install -g @nestjs/mau
-$ mau deploy
-```
+2. **No Existing Contact**
+   - If no contacts are found:
+     - A new primary contact is created.
 
-With Mau, you can deploy your application in just a few clicks, allowing you to focus on building features rather than managing infrastructure.
+3. **Resolve Primary Contact**
+   - If contacts exist:
+     - The primary contact is identified.
+     - If a matched contact is secondary, its parent primary is resolved.
 
-## Resources
+4. **Merge Primary Contacts**
+   - If a request links two different identity trees:
+     - Example:
+       - email belongs to identity A
+       - phone belongs to identity B
+     - Then:
+       - The oldest primary remains primary
+       - The newer primary becomes secondary
+       - All its linked contacts are reattached to the oldest primary
 
-Check out a few resources that may come in handy when working with NestJS:
+5. **Create Secondary Contact**
+   - If the request introduces new information:
+     - Example:
+       - Existing:
+         - email = a@mail.com
+         - phone = 123
+       - Request:
+         - email = b@mail.com
+         - phone = 123
+     - A secondary contact is created linked to the primary identity.
 
-- Visit the [NestJS Documentation](https://docs.nestjs.com) to learn more about the framework.
-- For questions and support, please visit our [Discord channel](https://discord.gg/G7Qnnhy).
-- To dive deeper and get more hands-on experience, check out our official video [courses](https://courses.nestjs.com/).
-- Deploy your application to AWS with the help of [NestJS Mau](https://mau.nestjs.com) in just a few clicks.
-- Visualize your application graph and interact with the NestJS application in real-time using [NestJS Devtools](https://devtools.nestjs.com).
-- Need help with your project (part-time to full-time)? Check out our official [enterprise support](https://enterprise.nestjs.com).
-- To stay in the loop and get updates, follow us on [X](https://x.com/nestframework) and [LinkedIn](https://linkedin.com/company/nestjs).
-- Looking for a job, or have a job to offer? Check out our official [Jobs board](https://jobs.nestjs.com).
-
-## Support
-
-Nest is an MIT-licensed open source project. It can grow thanks to the sponsors and support by the amazing backers. If you'd like to join them, please [read more here](https://docs.nestjs.com/support).
-
-## Stay in touch
-
-- Author - [Kamil Myśliwiec](https://twitter.com/kammysliwiec)
-- Website - [https://nestjs.com](https://nestjs.com/)
-- Twitter - [@nestframework](https://twitter.com/nestframework)
-
-## License
-
-Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).
+6. **Return Consolidated Identity**
+   - Response format:
+     ```
+     {
+     "contact": {
+       "primaryContactId": number,
+       "emails": string[],
+       "phoneNumbers": string[],
+       "secondaryContactIds": number[]
+       }
+     }
+     ```
