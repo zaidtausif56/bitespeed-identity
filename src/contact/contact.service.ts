@@ -13,9 +13,9 @@ export class ContactService {
     const contacts = await this.prisma.contact.findMany({
       where: {
         OR: [
-          email ? { email } : undefined,
-          phoneNumber ? { phoneNumber } : undefined,
-        ].filter(Boolean) as any,
+          ...(email ? [{ email }] : []),
+          ...(phoneNumber ? [{ phoneNumber }] : []),
+        ],
       },
       orderBy: {
         createdAt: 'asc',
@@ -66,9 +66,44 @@ export class ContactService {
       },
     });
 
+    // Step 5: collect existing emails and phone numbers
+    const emails = new Set(linkedContacts.map((c) => c.email).filter(Boolean));
+    const phoneNumbers = new Set(
+      linkedContacts.map((c) => c.phoneNumber).filter(Boolean),
+    );
+
+    let newSecondary = null;
+
+    // Step 6: create secondary contact if new info appears
+    if (
+      (email && !emails.has(email)) ||
+      (phoneNumber && !phoneNumbers.has(phoneNumber))
+    ) {
+      newSecondary = await this.prisma.contact.create({
+        data: {
+          email,
+          phoneNumber,
+          linkPrecedence: 'secondary',
+          linkedId: primaryContact.id,
+        },
+      });
+
+      linkedContacts.push(newSecondary);
+
+      if (email) emails.add(email);
+      if (phoneNumber) phoneNumbers.add(phoneNumber);
+    }
+
+    // Step 7: build response
     return {
-      message: 'primary contact detected',
-      contacts: linkedContacts,
+      contact: {
+        primaryContactId: primaryContact.id,
+        emails: Array.from(emails),
+        phoneNumbers: Array.from(phoneNumbers),
+        secondaryContactIds: linkedContacts
+          .filter((c) => c.linkPrecedence === 'secondary')
+          .map((c) => c.id),
+      },
     };
   }
 }
